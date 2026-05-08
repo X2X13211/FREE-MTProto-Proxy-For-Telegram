@@ -11,6 +11,8 @@ from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from aiogram.exceptions import TelegramRetryAfter
+from aiohttp import web
 
 # Load environment variables
 load_dotenv()
@@ -99,7 +101,13 @@ async def send_proxies_to_channel():
             save_sent_proxy(proxy)
             count += 1
             # Small delay to avoid flooding and hitting limits
-            await asyncio.sleep(2) 
+            # Telegram limit for channels is ~20 messages/min (~3s delay)
+            await asyncio.sleep(3.5) 
+        except TelegramRetryAfter as e:
+            logger.warning(f"Flood limit reached. Waiting for {e.retry_after} seconds...")
+            await asyncio.sleep(e.retry_after)
+            # Optionally retry the same proxy after waiting
+            # For now, we just wait and continue
         except Exception as e:
             logger.error(f"Error sending proxy {proxy}: {e}")
             await asyncio.sleep(5) # Longer delay on error
@@ -144,6 +152,21 @@ async def main():
     # Run every hour
     scheduler.add_job(send_proxies_to_channel, 'interval', hours=1, next_run_time=datetime.now())
     scheduler.start()
+
+    # Setup web server for Render health check
+    async def health_check(request):
+        return web.Response(text="OK")
+
+    app = web.Application()
+    app.router.add_get("/", health_check)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    
+    port = int(os.getenv("PORT", 10000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    
+    logger.info(f"Starting health check server on port {port}...")
+    await site.start()
 
     logger.info("Bot started...")
     # Delete webhook to avoid conflicts and start polling
