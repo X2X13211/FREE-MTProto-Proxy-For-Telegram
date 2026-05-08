@@ -12,6 +12,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram.exceptions import TelegramRetryAfter
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
 
 # Load environment variables
@@ -142,10 +143,24 @@ async def cmd_check(message: types.Message):
     else:
         pass # Ignore non-admins
 
+async def on_startup(bot: Bot):
+    # Determine the base URL for the webhook
+    # Render provides RENDER_EXTERNAL_URL by default
+    base_url = os.getenv("RENDER_EXTERNAL_URL")
+    if not base_url:
+        # Fallback if not set (though it should be on Render)
+        logger.warning("RENDER_EXTERNAL_URL not found, webhooks might not work correctly.")
+        return
+
+    webhook_url = f"{base_url}/webhook"
+    logger.info(f"Setting webhook to: {webhook_url}")
+    await bot.set_webhook(url=webhook_url, drop_pending_updates=True)
+
 async def main():
-    # Initialize Dispatcher here to avoid loop issues
+    # Initialize Dispatcher
     dp = Dispatcher()
     dp.include_router(router)
+    dp.startup.register(on_startup)
 
     # Setup scheduler
     scheduler = AsyncIOScheduler()
@@ -153,25 +168,44 @@ async def main():
     scheduler.add_job(send_proxies_to_channel, 'interval', hours=1, next_run_time=datetime.now())
     scheduler.start()
 
-    # Setup web server for Render health check
+    # Setup web application
+    app = web.Application()
+    
+    # Simple health check for Render
     async def health_check(request):
         return web.Response(text="OK")
-
-    app = web.Application()
+    
     app.router.add_get("/", health_check)
+
+    # Webhook handler
+    webhook_requests_handler = SimpleRequestHandler(
+        dispatcher=dp,
+        bot=bot,
+    )
+    # Register the webhook handler on /webhook
+    webhook_requests_handler.register(app, path="/webhook")
+
+    # Finalize setup
+    setup_application(app, dp, bot=bot)
+
+    # Get port from environment
+    port = int(os.getenv("PORT", 10000))
+    
+    # Start the server
     runner = web.AppRunner(app)
     await runner.setup()
-    
-    port = int(os.getenv("PORT", 10000))
     site = web.TCPSite(runner, "0.0.0.0", port)
     
-    logger.info(f"Starting health check server on port {port}...")
+    logger.info(f"Starting web server on port {port}...")
     await site.start()
 
-    logger.info("Bot started...")
-    # Delete webhook to avoid conflicts and start polling
-    await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+    logger.info("Bot is running with webhooks...")
+    
+    # Keep the process alive
+    try:
+        await asyncio.Event().wait()
+    finally:
+        await runner.cleanup()
 
 if __name__ == "__main__":
     try:
