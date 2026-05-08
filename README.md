@@ -1,1 +1,1 @@
-# FREE-MTProxy-in-Telegram
+# FREE-MTProto-Proxy-For-Telegram
