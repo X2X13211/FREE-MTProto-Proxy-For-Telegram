@@ -1,0 +1,8 @@
+.env
+sent_proxies.txt
+__pycache__/
+*.pyc
+.vscode/
+.idea/
+venv/
+.venv/
