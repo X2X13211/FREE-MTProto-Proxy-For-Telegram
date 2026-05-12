@@ -5,3 +5,16 @@
 #telegram #mtproto #proxy #mtproxy #telegramproxy #vpn #faketls #telegramvpn #bypass #privacy #security #opensource #github #telegrammtproto #proxyserver #proxylist #freeproxy #network #censorship #cybersecurity
 
 <img width="1254" height="1254" alt="ChatGPT Image 12 мая 2026 г , 18_30_48" src="https://github.com/user-attachments/assets/ac180da5-ce8d-4926-9869-c96833645a27" />
+
+## Telegram Канал
+
+Следите за последними обновлениями и новыми прокси:
+
+➡️ https://t.me/timenewsai
+
+
+## Telegram Channel
+
+Stay updated with the latest proxies and updates:
+
+➡️ https://t.me/timenewsai
