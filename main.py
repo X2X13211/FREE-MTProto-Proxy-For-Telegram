@@ -15,14 +15,12 @@ from aiogram.exceptions import TelegramRetryAfter
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
 
-# Load environment variables
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
 PROXY_LIST_URL = os.getenv("PROXY_LIST_URL")
 
-# Logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -35,7 +33,6 @@ async def get_proxies():
         async with httpx.AsyncClient() as client:
             response = await client.get(PROXY_LIST_URL)
             response.raise_for_status()
-            # Split by lines and filter empty lines or non-proxy links
             lines = response.text.splitlines()
             proxies = [line.strip() for line in lines if line.strip().startswith(('tg://', 'https://t.me/proxy'))]
             return proxies
@@ -71,7 +68,6 @@ async def send_proxies_to_channel():
             continue
             
         try:
-            # Parse proxy details
             parsed_url = urlparse(proxy)
             params = parse_qs(parsed_url.query)
             
@@ -83,11 +79,9 @@ async def send_proxies_to_channel():
                 logger.warning(f"Skipping malformed proxy: {proxy}")
                 continue
 
-            # Build keyboard
             builder = InlineKeyboardBuilder()
             builder.row(InlineKeyboardButton(text="connect", url=proxy))
             
-            # Send message
             message_text = (
                 f"Server: {server}\n"
                 f"Port: {port}\n"
@@ -101,14 +95,10 @@ async def send_proxies_to_channel():
             )
             save_sent_proxy(proxy)
             count += 1
-            # Small delay to avoid flooding and hitting limits
-            # Telegram limit for channels is ~20 messages/min (~3s delay)
             await asyncio.sleep(3.5) 
         except TelegramRetryAfter as e:
             logger.warning(f"Flood limit reached. Waiting for {e.retry_after} seconds...")
             await asyncio.sleep(e.retry_after)
-            # Optionally retry the same proxy after waiting
-            # For now, we just wait and continue
         except Exception as e:
             logger.error(f"Error sending proxy {proxy}: {e}")
             await asyncio.sleep(5) # Longer delay on error
@@ -130,8 +120,6 @@ async def cmd_start(message: types.Message):
         await message.answer("Привет, админ! Бот работает в автоматическом режиме (раз в час).\n\n"
                              "Используй /check чтобы запустить проверку сейчас.")
     else:
-        # If not admin, we can ignore or send a polite message
-        # The user requested "отвечал только администраторам"
         pass
 
 @router.message(Command("check"))
@@ -144,11 +132,8 @@ async def cmd_check(message: types.Message):
         pass # Ignore non-admins
 
 async def on_startup(bot: Bot):
-    # Determine the base URL for the webhook
-    # Render provides RENDER_EXTERNAL_URL by default
     base_url = os.getenv("RENDER_EXTERNAL_URL")
     if not base_url:
-        # Fallback if not set (though it should be on Render)
         logger.warning("RENDER_EXTERNAL_URL not found, webhooks might not work correctly.")
         return
 
@@ -157,41 +142,31 @@ async def on_startup(bot: Bot):
     await bot.set_webhook(url=webhook_url, drop_pending_updates=True)
 
 async def main():
-    # Initialize Dispatcher
     dp = Dispatcher()
     dp.include_router(router)
     dp.startup.register(on_startup)
 
-    # Setup scheduler
     scheduler = AsyncIOScheduler()
-    # Run every hour
     scheduler.add_job(send_proxies_to_channel, 'interval', hours=1, next_run_time=datetime.now())
     scheduler.start()
 
-    # Setup web application
     app = web.Application()
     
-    # Simple health check for Render
     async def health_check(request):
         return web.Response(text="OK")
     
     app.router.add_get("/", health_check)
 
-    # Webhook handler
     webhook_requests_handler = SimpleRequestHandler(
         dispatcher=dp,
         bot=bot,
     )
-    # Register the webhook handler on /webhook
     webhook_requests_handler.register(app, path="/webhook")
 
-    # Finalize setup
     setup_application(app, dp, bot=bot)
-
-    # Get port from environment
     port = int(os.getenv("PORT", 10000))
     
-    # Start the server
+    # Start server
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
@@ -201,7 +176,6 @@ async def main():
 
     logger.info("Bot is running with webhooks...")
     
-    # Keep the process alive
     try:
         await asyncio.Event().wait()
     finally:
